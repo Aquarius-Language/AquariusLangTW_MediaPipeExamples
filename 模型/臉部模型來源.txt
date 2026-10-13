@@ -1,0 +1,20 @@
+臉部偵測與臉部關鍵點模型：
+https://github.com/yakhyo/mediapipe-face-mesh-onnx/tree/add50e0f486405c96695812f9a9b9b89a485892b
+作者：Yakhyokhuja Valikhujaev，Copyright 2026。
+權重與臉部網格拓樸源自 Google MediaPipe，Apache-2.0。
+Face Mesh 權重經 PINTO0309 的 ONNX 轉換取得，Apache-2.0。
+https://github.com/google-ai-edge/mediapipe
+https://github.com/PINTO0309/PINTO_model_zoo/tree/main/032_FaceMesh
+
+下載檔案（weights 發佈版本，建置時驗證 SHA-256）：
+face_detection_short_range.onnx → 臉部偵測.onnx
+face_mesh_Nx3x192x192.onnx → 臉部關鍵點.onnx
+
+本專案修改：準備臉部模型.mjs 保留原始權重，在模型前加入 RGBA 通道擷取、浮點轉換、NCHW 排列與正規化節點，產生 臉部偵測影像.onnx 與 臉部關鍵點影像.onnx。此修改支援整批無號八位元影像張量；偵測器使用 [-1, 1]，網格使用 [0, 1]。產生前會再次校驗原始模型的固定 SHA-256。
+
+前後處理依照 MediaPipe 的 SSD 錨點、加權抑制、眼睛旋轉對齊及 1.5 倍正方形裁切配置，使用星泉重新實作。
+眼睛、嘴唇、眉毛與臉部輪廓索引沿用 Google MediaPipe face_mesh_connections.py 的標準 468 點拓樸：
+https://github.com/google-ai-edge/mediapipe/blob/v0.10.14/mediapipe/python/solutions/face_mesh_connections.py
+
+額外驗證照片取自同一固定版本的 assets/inputs/man_smiling.jpg，僅用於本機驗證，不包含於正式網頁封裝。
+授權全文保留於 臉部模型授權.txt。
