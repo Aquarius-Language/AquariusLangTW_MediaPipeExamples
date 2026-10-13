@@ -1,0 +1,92 @@
+name: Build and deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out the application
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Check out the compiler
+        uses: actions/checkout@v6
+        with:
+          repository: Aquarius-Language/AquariusLangTW
+          ref: 8282e5201925af6c76235844e9c0d6a6ad9897da
+          path: .compiler
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: .compiler/AquariusWebCompiler/package-lock.json
+
+      - name: Prepare browser dependencies
+        run: |
+          npm ci --prefix .compiler/AquariusWebCompiler
+          if ($LASTEXITCODE -ne 0) { throw 'Browser dependency installation failed.' }
+          npm run --prefix .compiler/AquariusWebCompiler prepare:browser
+          if ($LASTEXITCODE -ne 0) { throw 'Browser dependency preparation failed.' }
+
+      - name: Build the compiler
+        run: |
+          $compilerDirectory = Join-Path $env:RUNNER_TEMP 'aquarius-cli'
+          dotnet build .compiler/AquariusCli/AquariusCli.csproj -c Release -o $compilerDirectory
+          if ($LASTEXITCODE -ne 0) { throw 'Compiler build failed.' }
+          Set-Content -LiteralPath (Join-Path $compilerDirectory 'aqua.cmd') -Value '@dotnet "%~dp0aqua.dll" %*' -Encoding ascii
+          $compilerDirectory >> $env:GITHUB_PATH
+
+      - name: Build and verify the website
+        run: |
+          ./建置.ps1 -略過桌面
+          foreach ($file in @('index.html', 'app.mjs', 'program.json', 'program.wasm', 'pose.wasm', 'ort.webgpu.min.mjs', 'ort-wasm-simd-threaded.asyncify.wasm')) {
+            if (-not (Test-Path -LiteralPath (Join-Path 'web' $file) -PathType Leaf)) {
+              throw "Missing website output: $file"
+            }
+          }
+
+      - name: Upload the website
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: web
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Deploy the website
+        id: deployment
+        uses: actions/deploy-pages@v4
